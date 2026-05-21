@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
 
-_ALLOWED_REDIRECT_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
-
 
 def query_param(url: str, key: str) -> str:
     """Return the first value for ``key`` in ``url``'s query string."""
@@ -19,12 +17,14 @@ def query_param(url: str, key: str) -> str:
 
 
 def is_safe_redirect_uri(uri: str) -> bool:
-    """Return whether ``uri`` is a loopback HTTP(S) URL safe to redirect to.
+    """Return whether ``uri`` is an HTTP(S) URL safe to redirect to.
 
-    Refuses non-http(s) schemes (rejects ``javascript:`` payloads) and any
-    host other than ``localhost`` / ``127.0.0.1`` / ``::1``. ``urlparse`` is
-    careful to strip ``userinfo@`` from ``.hostname``, so ``http://localhost@
-    evil.example`` is rejected on the host check.
+    Refuses non-http(s) schemes (rejects ``javascript:`` payloads) and URIs
+    with no parseable hostname. No host allowlist — real social APIs (Meta,
+    TikTok) exact-match against URIs registered in the developer portal
+    rather than restricting by host shape, so posthole accepts any HTTP(S)
+    host. Operators relying on registration semantics drive that through
+    seed data instead.
     """
     try:
         parts = urlparse(uri)
@@ -34,4 +34,4 @@ def is_safe_redirect_uri(uri: str) -> bool:
     if parts.scheme not in {"http", "https"}:
         return False
 
-    return parts.hostname in _ALLOWED_REDIRECT_HOSTS
+    return bool(parts.hostname)

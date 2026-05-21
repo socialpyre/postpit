@@ -105,12 +105,12 @@ class AccountNotFoundError(MetaAPIError):
 
 
 class InvalidRedirectUriError(MetaAPIError):
-    """``redirect_uri`` is missing, non-loopback, or non-http(s)."""
+    """``redirect_uri`` is missing or non-http(s)."""
 
     status_code = 400
     error_type = "OAuthException"
     code = 100
-    default_message = "redirect_uri must be a loopback http(s) URL"
+    default_message = "redirect_uri must be an http(s) URL"
 
 
 class UnsupportedMediaTypeError(MetaAPIError):

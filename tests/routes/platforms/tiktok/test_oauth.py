@@ -174,18 +174,6 @@ async def test_user_info_rejects_missing_bearer(client: httpx.AsyncClient) -> No
     assert response.json()["error"]["code"] == "access_token_invalid"
 
 
-async def test_authorize_post_rejects_non_loopback_redirect(client: httpx.AsyncClient) -> None:
-    """A non-loopback redirect_uri must be rejected to avoid auth-code exfiltration."""
-    response = await client.post(
-        "/auth/authorize/",
-        data={"account_id": CREATOR, "redirect_uri": "https://evil.example/cb", "state": ""},
-        follow_redirects=False,
-    )
-
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "invalid_param"
-
-
 async def test_authorize_post_rejects_javascript_scheme(client: httpx.AsyncClient) -> None:
     response = await client.post(
         "/auth/authorize/",

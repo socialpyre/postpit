@@ -50,11 +50,11 @@ class InvalidParamError(TikTokAPIError):
 
 
 class InvalidRedirectUriError(TikTokAPIError):
-    """``redirect_uri`` is missing, non-loopback, or non-http(s)."""
+    """``redirect_uri`` is missing or non-http(s)."""
 
     status_code = 400
     code = "invalid_param"
-    default_message = "redirect_uri must be a loopback http(s) URL"
+    default_message = "redirect_uri must be an http(s) URL"
 
 
 class UnknownAccountIdError(TikTokAPIError):

@@ -164,18 +164,6 @@ async def test_me_rejects_invalid_token(client: httpx.AsyncClient) -> None:
     assert response.json()["error"]["code"] == 190
 
 
-async def test_authorize_post_rejects_non_loopback_redirect(client: httpx.AsyncClient) -> None:
-    """A non-loopback redirect_uri must be rejected to avoid auth-code exfiltration."""
-    response = await client.post(
-        "/oauth/authorize",
-        data={"account_id": ALICE, "redirect_uri": "https://evil.example/cb", "state": ""},
-        follow_redirects=False,
-    )
-
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == 100
-
-
 async def test_authorize_post_rejects_javascript_scheme(client: httpx.AsyncClient) -> None:
     response = await client.post(
         "/oauth/authorize",
