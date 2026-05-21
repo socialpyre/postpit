@@ -23,6 +23,8 @@ UPDATE accounts SET platform = 'instagram' WHERE platform = 'instagram';
 -- Seed two TikTok mock accounts. IDs use TikTok's open_id-style prefix
 -- so they're visually distinct from IG's numeric IDs at a glance.
 INSERT INTO accounts (id, username, display_name, avatar_url, account_type, platform)
-  VALUES ('tt-7000000000000000001', 'test_creator', 'Test Creator', NULL, 'CREATOR_ACCOUNT', 'tiktok');
+  VALUES ('tt-7000000000000000001', 'test_creator', 'Test Creator',
+    'https://picsum.photos/seed/posthole-creator/256/256', 'CREATOR_ACCOUNT', 'tiktok');
 INSERT INTO accounts (id, username, display_name, avatar_url, account_type, platform)
-  VALUES ('tt-7000000000000000002', 'test_brand', 'Test Brand', NULL, 'BUSINESS_ACCOUNT', 'tiktok');
+  VALUES ('tt-7000000000000000002', 'test_brand', 'Test Brand',
+    'https://picsum.photos/seed/posthole-brand/256/256', 'BUSINESS_ACCOUNT', 'tiktok');

@@ -33,6 +33,8 @@ CREATE INDEX idx_posts_container_id ON posts (container_id);
 -- (migration 0001 records its application in schema_version); if the user
 -- later deletes a seed row, it stays deleted across reboots.
 INSERT INTO accounts (id, username, display_name, avatar_url, account_type)
-  VALUES ('178414000000001', 'test_studio', 'Test Studio', NULL, 'BUSINESS');
+  VALUES ('178414000000001', 'test_studio', 'Test Studio',
+    'https://picsum.photos/seed/posthole-studio/256/256', 'BUSINESS');
 INSERT INTO accounts (id, username, display_name, avatar_url, account_type)
-  VALUES ('178414000000002', 'test_artist', 'Test Artist', NULL, 'BUSINESS');
+  VALUES ('178414000000002', 'test_artist', 'Test Artist',
+    'https://picsum.photos/seed/posthole-artist/256/256', 'BUSINESS');
