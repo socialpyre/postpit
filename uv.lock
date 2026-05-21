@@ -620,7 +620,7 @@ wheels = [
 
 [[package]]
 name = "posthole"
-version = "0.3.0"
+version = "0.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "asgi-correlation-id" },
