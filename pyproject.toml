@@ -4,7 +4,7 @@ requires = [ "hatchling>=1.25" ]
 
 [project]
 name = "posthole"
-version = "0.6.0"
+version = "0.7.0"
 description = "Local mock server for social media platform APIs - auth, publishing, the lot"
 readme = "README.md"
 keywords = [ "devtool", "fastapi", "hotwire", "instagram", "mock-server", "social-media" ]
