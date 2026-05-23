@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # --- Stage 1: build frontend assets (Node) ---
-FROM node:24-slim AS assets
+FROM node:26-slim AS assets
 
 WORKDIR /src
 
