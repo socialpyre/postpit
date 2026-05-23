@@ -138,6 +138,143 @@ class ContainerNotFoundError(MetaAPIError):
     default_message = "Container not found"
 
 
+class RateLimitedError(MetaAPIError):
+    """Generic rate-limit exception — concrete subclasses pin the Meta error code.
+
+    Meta returns four distinct ``code`` values for "you're being throttled"
+    (4/17/32/613) depending on which limit tripped. Real clients commonly
+    branch on the numeric code rather than the message, so the mock
+    exposes each as its own subclass.
+    """
+
+    status_code = 400
+    error_type = "OAuthException"
+    default_message = "Rate limited"
+
+
+class ApplicationRateLimitedError(RateLimitedError):
+    """``code=4`` — the app-level call quota tripped."""
+
+    code = 4
+    default_message = "Application request limit reached"
+
+
+class UserRateLimitedError(RateLimitedError):
+    """``code=17`` — the per-user call quota tripped."""
+
+    code = 17
+    default_message = "User request limit reached"
+
+
+class PageRateLimitedError(RateLimitedError):
+    """``code=32`` — the per-page call quota tripped."""
+
+    code = 32
+    default_message = "Page request limit reached"
+
+
+class GenericRateLimitedError(RateLimitedError):
+    """``code=613`` — the generic "calls to this api have exceeded the rate limit"."""
+
+    code = 613
+    default_message = "Calls to this api have exceeded the rate limit"
+
+
+class MediaUnreachableError(MetaAPIError):
+    """``code=100, error_subcode=2207026`` — IG could not fetch the media URL."""
+
+    status_code = 400
+    code = 100
+    error_subcode = 2207026
+    default_message = "Media not reachable"
+
+
+class MediaFormatUnsupportedError(MediaUnreachableError):
+    """``code=100, error_subcode=9004`` — IG fetched the media but can't decode it.
+
+    Subclasses :class:`MediaUnreachableError` so callers catching the
+    "we couldn't get usable media" failure mode hit both via one ``except``.
+    """
+
+    error_subcode = 9004
+    default_message = "Media format unsupported"
+
+
+class PasswordChangedError(MetaAPIError):
+    """``code=190, error_subcode=460`` — token invalidated because password changed."""
+
+    status_code = 400
+    error_type = "OAuthException"
+    code = 190
+    error_subcode = 460
+    default_message = "The user changed their password"
+
+
+class TokenExpiredError(MetaAPIError):
+    """``code=190, error_subcode=463`` — token aged out of its TTL."""
+
+    status_code = 400
+    error_type = "OAuthException"
+    code = 190
+    error_subcode = 463
+    default_message = "Access token has expired"
+
+
+class TokenRevokedError(MetaAPIError):
+    """``code=190, error_subcode=467`` — user revoked the app's permissions."""
+
+    status_code = 400
+    error_type = "OAuthException"
+    code = 190
+    error_subcode = 467
+    default_message = "Access token has been revoked"
+
+
+class CarouselChildPublishError(MetaAPIError):
+    """``code=100, error_subcode=2207020`` — direct publish of a child container.
+
+    Child containers (``is_carousel_item=true``) can only be published as
+    part of a parent CAROUSEL container. Real Meta returns this when a
+    client passes a child's id to ``/{user_id}/media_publish``.
+    """
+
+    status_code = 400
+    code = 100
+    error_subcode = 2207020
+    default_message = "Carousel child containers cannot be published directly"
+
+
+class CarouselChildInvalidError(MetaAPIError):
+    """A referenced ``children=`` id is missing or not flagged as a carousel item."""
+
+    status_code = 400
+    code = 100
+    default_message = "Invalid carousel child container"
+
+
+class ContainerExpiredError(MetaAPIError):
+    """``code=9007, error_subcode=2207027`` — container is past its useful TTL.
+
+    IG containers are short-lived; once a container hits EXPIRED status,
+    /media_publish refuses to use it. The mock surfaces the same shape
+    so retry/cleanup logic in clients can be exercised.
+    """
+
+    status_code = 400
+    code = 9007
+    error_subcode = 2207027
+    default_message = "Media container has expired"
+
+
+class ContainerNotReadyError(MetaAPIError):
+    """``status_code != FINISHED`` at publish time — same wire shape as expired."""
+
+    status_code = 400
+    code = 9007
+    error_subcode = 2207027
+    default_message = "Media container is not ready to publish"
+
+
 async def meta_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
     """FastAPI handler — converts any :class:`MetaAPIError` into its wire envelope.
 

@@ -17,16 +17,22 @@ if TYPE_CHECKING:
     from posthole.db.database import Database
 
 
-MediaType = Literal["IMAGE", "VIDEO"]
+MediaItemKind = Literal["IMAGE", "VIDEO"]
+MediaType = Literal["IMAGE", "VIDEO", "CAROUSEL"]
 PostStatus = Literal["pending", "published", "failed"]
+ContainerStatus = Literal["IN_PROGRESS", "FINISHED", "ERROR", "EXPIRED"]
 
 
 @dataclass(slots=True, frozen=True)
 class Media:
-    """One item in a post's media set (carousel slide or singleton)."""
+    """One item in a post's media set (carousel slide or singleton).
+
+    ``kind`` is :data:`MediaItemKind` (IMAGE | VIDEO), not :data:`MediaType` —
+    CAROUSEL describes a *parent* container, never an individual slide.
+    """
 
     ordinal: int
-    kind: MediaType
+    kind: MediaItemKind
     url: str
 
 
@@ -58,6 +64,12 @@ class Post:
     media_type: MediaType | None
     platform_post_id: str | None
     media: list[Media] = field(default_factory=list)
+    container_status: ContainerStatus = "IN_PROGRESS"
+    poll_count: int = 0
+    poll_threshold: int = 0
+    inject_next_failure_kind: str | None = None
+    is_carousel_item: bool = False
+    child_container_ids: list[str] = field(default_factory=list)
 
 
 def create(
@@ -70,6 +82,11 @@ def create(
     media_url: str | None = None,
     media_type: MediaType | None = None,
     media: list[Media] | None = None,
+    container_status: ContainerStatus = "IN_PROGRESS",
+    poll_threshold: int = 0,
+    inject_next_failure_kind: str | None = None,
+    is_carousel_item: bool = False,
+    child_container_ids: list[str] | None = None,
 ) -> Post:
     """Insert a new post in ``pending`` status; return the hydrated row."""
     media_list = list(media) if media else []
@@ -79,7 +96,13 @@ def create(
         else None
     )
     if not media_list and media_url:
-        media_list = [Media(ordinal=0, kind=media_type or "IMAGE", url=media_url)]
+        # CAROUSEL describes a parent and never has its own media_url, so the
+        # synthesized item is always IMAGE | VIDEO — narrow back to MediaItemKind.
+        item_kind: MediaItemKind = "VIDEO" if media_type == "VIDEO" else "IMAGE"
+        media_list = [Media(ordinal=0, kind=item_kind, url=media_url)]
+
+    children = list(child_container_ids) if child_container_ids else []
+    child_csv = ",".join(children) if children else None
 
     post = Post(
         id=str(uuid.uuid4()),
@@ -95,6 +118,12 @@ def create(
         media_type=media_type,
         platform_post_id=None,
         media=media_list,
+        container_status=container_status,
+        poll_count=0,
+        poll_threshold=poll_threshold,
+        inject_next_failure_kind=inject_next_failure_kind,
+        is_carousel_item=is_carousel_item,
+        child_container_ids=children,
     )
 
     with db.cursor() as cur:
@@ -111,10 +140,22 @@ def create(
                 post.media_url,
                 post.media_type,
                 media_items_json,
+                post.container_status,
+                post.poll_count,
+                post.poll_threshold,
+                post.inject_next_failure_kind,
+                1 if post.is_carousel_item else 0,
+                child_csv,
             ),
         )
 
     return post
+
+
+def clear_inject_failure_by_external_ref(db: Database, external_ref: str) -> None:
+    """Clear an armed failure injection — call after the failure has been raised."""
+    with db.cursor() as cur:
+        cur.execute(sql.CLEAR_INJECT_FAILURE_BY_EXTERNAL_REF, (external_ref,))
 
 
 def count(db: Database) -> int:
@@ -147,6 +188,30 @@ def get_by_external_ref(db: Database, external_ref: str) -> Post | None:
         cur.execute(sql.GET_BY_EXTERNAL_REF, (external_ref,))
         row = cur.fetchone()
     return _from_row(row) if row else None
+
+
+def increment_poll_count(db: Database, external_ref: str) -> None:
+    """Bump the container's poll counter by 1."""
+    with db.cursor() as cur:
+        cur.execute(sql.INCREMENT_POLL_COUNT, (external_ref,))
+
+
+def list_by_external_refs(db: Database, refs: list[str]) -> list[Post]:
+    """Fetch posts for a set of ``external_ref`` values, in DB order.
+
+    Sized for carousel children (≤10 refs). The query expands one ``?`` per
+    ref via :data:`sql.LIST_BY_EXTERNAL_REFS`, so very large lists can hit
+    SQLite's variable-count limit (default 999). Callers that need bulk
+    lookups should batch.
+    """
+    if not refs:
+        return []
+    placeholders = ",".join("?" for _ in refs)
+    stmt = sql.LIST_BY_EXTERNAL_REFS.format(placeholders=placeholders)
+    with db.cursor() as cur:
+        cur.execute(stmt, refs)
+        rows = cur.fetchall()
+    return [_from_row(r) for r in rows]
 
 
 def list_recent(
@@ -229,11 +294,28 @@ def mark_published_by_external_ref(
     return _from_row(row) if row else None
 
 
+def set_container_status_by_external_ref(
+    db: Database, external_ref: str, status: ContainerStatus
+) -> None:
+    """Pin the container's ``status_code`` (FINISHED, EXPIRED, ERROR, IN_PROGRESS)."""
+    with db.cursor() as cur:
+        cur.execute(sql.SET_CONTAINER_STATUS_BY_EXTERNAL_REF, (status, external_ref))
+
+
+def set_inject_failure_by_external_ref(db: Database, external_ref: str, kind: str | None) -> None:
+    """Arm a failure injection on the next IG call against this container."""
+    with db.cursor() as cur:
+        cur.execute(sql.SET_INJECT_FAILURE_BY_EXTERNAL_REF, (kind, external_ref))
+
+
 def _from_row(row: sqlite3.Row) -> Post:
     """Hydrate a :class:`Post` from a ``posts`` table row."""
     media = _parse_media_items(row["media_items"])
     if not media and row["media_url"]:
         media = [Media(ordinal=0, kind=row["media_type"] or "IMAGE", url=row["media_url"])]
+
+    children_raw = row["child_container_ids"]
+    children = [c for c in (children_raw or "").split(",") if c]
 
     return Post(
         id=row["id"],
@@ -249,6 +331,12 @@ def _from_row(row: sqlite3.Row) -> Post:
         media_type=row["media_type"],
         platform_post_id=row["platform_post_id"],
         media=media,
+        container_status=row["container_status"] or "IN_PROGRESS",
+        poll_count=row["poll_count"] or 0,
+        poll_threshold=row["poll_threshold"] or 0,
+        inject_next_failure_kind=row["inject_next_failure_kind"],
+        is_carousel_item=bool(row["is_carousel_item"]),
+        child_container_ids=children,
     )
 
 

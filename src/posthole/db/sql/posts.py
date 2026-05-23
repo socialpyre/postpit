@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-COUNT_ALL = "SELECT COUNT(*) AS n FROM posts"
+# Carousel children are upload stubs in IG's two-step API, not posts in
+# their own right — exclude them from inbox-facing list/count queries so
+# one published carousel renders as one row, not 1+N. Internal lookups
+# (get_by_external_ref, list_by_external_refs) still see children.
+COUNT_ALL = "SELECT COUNT(*) AS n FROM posts WHERE is_carousel_item = 0"
 
-COUNT_BY_STATUS = "SELECT status, COUNT(*) AS n FROM posts GROUP BY status"
+COUNT_BY_STATUS = (
+    "SELECT status, COUNT(*) AS n FROM posts WHERE is_carousel_item = 0 GROUP BY status"
+)
 
 GET_BY_EXTERNAL_REF = "SELECT * FROM posts WHERE external_ref = ?"
 
@@ -13,8 +19,10 @@ GET_BY_ID = "SELECT * FROM posts WHERE id = ?"
 INSERT = (
     "INSERT INTO posts ("
     "id, platform, account_id, caption, status, created_at, "
-    "external_ref, media_url, media_type, media_items"
-    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "external_ref, media_url, media_type, media_items, "
+    "container_status, poll_count, poll_threshold, "
+    "inject_next_failure_kind, is_carousel_item, child_container_ids"
+    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
 LIST_RECENT = (
@@ -23,7 +31,8 @@ LIST_RECENT = (
     # the user isn't searching. The username is consulted only by the
     # :like_q branch below.
     "LEFT JOIN accounts ON accounts.id = posts.account_id "
-    "WHERE (:platform IS NULL OR posts.platform = :platform) "
+    "WHERE posts.is_carousel_item = 0 "
+    "AND (:platform IS NULL OR posts.platform = :platform) "
     "AND (:status IS NULL OR posts.status = :status) "
     # :like_q is the wrapped ``%needle%`` form produced by
     # ``posthole.db.query.like_needle`` — it pre-escapes ``%`` / ``_`` /
@@ -43,4 +52,26 @@ MARK_PUBLISHED = "UPDATE posts SET status = 'published', published_at = ? WHERE 
 MARK_PUBLISHED_BY_EXTERNAL_REF = (
     "UPDATE posts SET status = 'published', published_at = ?, platform_post_id = ? "
     "WHERE external_ref = ?"
+)
+
+# Container-state extensions (migration 0005).
+
+INCREMENT_POLL_COUNT = "UPDATE posts SET poll_count = poll_count + 1 WHERE external_ref = ?"
+
+SET_CONTAINER_STATUS_BY_EXTERNAL_REF = (
+    "UPDATE posts SET container_status = ? WHERE external_ref = ?"
+)
+
+SET_INJECT_FAILURE_BY_EXTERNAL_REF = (
+    "UPDATE posts SET inject_next_failure_kind = ? WHERE external_ref = ?"
+)
+
+CLEAR_INJECT_FAILURE_BY_EXTERNAL_REF = (
+    "UPDATE posts SET inject_next_failure_kind = NULL WHERE external_ref = ?"
+)
+
+LIST_BY_EXTERNAL_REFS = (
+    # NB: caller is responsible for the placeholder expansion — we don't know
+    # the cardinality up front. See ``posts.list_by_external_refs``.
+    "SELECT * FROM posts WHERE external_ref IN ({placeholders})"
 )
